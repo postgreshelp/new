@@ -15,3 +15,21 @@ Risks for upgrading to v14
 • Query plans gets changed which sometimes degrades the performance
 Once you've upgraded and started adding new data, it's very challenging to go back to the old version without losing that
 new data
+=========
+
+Note : For capturing the queries, I have included idle sessions in the long running query. But in general, we retrieve only active long running queries
+
+Need to work, how to capture the queries for the users other than AuroraAppAdmin. 
+Need to figure out insufficient privileges issue for the queries other than AuroraAppAdmin...
+
+Need to work, how to schedule this..
+
+Need to work, how to deal the RSA token when it is scheduled.
+
+How to implement this in prod
+
+If long running query count is greater than 1, then only it should trigger email
+
+Acl and dlat??
+
+
