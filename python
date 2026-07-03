@@ -1,0 +1,160 @@
+1. connect and run pg_sleep()
+
+import psycopg2
+
+conn = psycopg2.connect(
+        host="192.168.108.147",
+        port=6432,
+        database="postgres",
+        user="postgres",
+        password="postgres"
+)
+
+cursor = conn.cursor()
+
+cursor.execute("SELECT pg_sleep(2)")
+
+cursor.close()  
+conn.close()    
+
+2. make it idle in transaction
+
+import psycopg2
+
+conn = psycopg2.connect(
+        host="192.168.108.147",
+        port=6432,
+        database="postgres",
+        user="postgres",
+        password="postgres"
+)
+
+cursor = conn.cursor()
+
+cursor.execute("SELECT pg_sleep(2)")
+input("Press Enter to continue...")
+
+cursor.close()  
+conn.close()    
+
+3. make it idle 
+
+import psycopg2
+
+conn = psycopg2.connect(
+        host="192.168.108.147",
+        port=6432,
+        database="postgres",
+        user="postgres",
+        password="postgres"
+)
+
+cursor = conn.cursor()
+
+cursor.execute("SELECT pg_sleep(2)")
+conn.commit()
+input("Press Enter to continue...")
+
+cursor.close()  
+conn.close()    
+
+4. simulate pgbouncer
+
+import psycopg2
+import threading
+
+def run_session():
+
+    conn = psycopg2.connect(
+            host="192.168.108.147",
+            port=6432,
+            database="postgres",
+            user="postgres",
+            password="postgres"
+    )
+
+    cursor = conn.cursor()
+
+    cursor.execute("SELECT pg_sleep(2)")
+    conn.commit()
+    ## input("Press Enter to continue...")
+
+    cursor.close()  
+    conn.close()
+
+threads = []
+
+for _ in range(40):
+    t = threading.Thread(target=run_session)
+    threads.append(t)
+
+for t in threads:
+    t.start()
+
+
+5. simulate long runnning queries
+
+import psycopg2
+import threading
+
+def run_session():
+
+    conn = psycopg2.connect(
+            host="192.168.108.147",
+            port=6432,
+            database="postgres",
+            user="postgres",
+            password="postgres"
+    )
+
+    cursor = conn.cursor()
+
+    cursor.execute("SELECT pg_sleep(60)")
+    conn.commit()
+    input("Press Enter to continue...")
+
+    cursor.close()  
+    conn.close()
+
+threads = []
+
+for _ in range(40):
+    t = threading.Thread(target=run_session)
+    threads.append(t)
+
+for t in threads:
+    t.start()
+
+
+    
+5. connection closed message
+
+
+import psycopg2
+
+try:    
+    conn = psycopg2.connect(
+                    host="192.168.108.147",
+                    port=6432,
+                    database="postgres",
+                    user="postgres",
+                    password="postgres"
+            )
+
+    cursor = conn.cursor()
+
+    cursor.execute("SELECT pg_sleep(120)")
+    conn.commit()
+    input("Press Enter to continue...")
+    cursor.close()  
+    conn.close()
+    
+except psycopg2.OperationalError:
+    print("Connection closed at database level.")
+
+    
+
+    
+    
+
+    
