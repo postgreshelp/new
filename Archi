@@ -1,0 +1,182 @@
+# Aurora Database Activity Streams (DAS) Architecture
+
+## Overview
+
+This project demonstrates how Amazon Aurora Database Activity Streams (DAS) securely captures every database activity, encrypts it, streams it through Amazon Kinesis, and processes it for security monitoring.
+
+The implementation is divided into **two phases**:
+
+- **Phase 1** – Understand how Aurora encrypts DAS records by manually decrypting them.
+- **Phase 2** – Build the production monitoring pipeline described in the AWS reference architecture.
+
+---
+
+# Overall Architecture
+
+```text
+                             SQL Statements
+                                   │
+                                   ▼
+                      Amazon Aurora PostgreSQL
+                                   │
+                  Database Activity Streams (DAS)
+                                   │
+                    (Encrypted Activity Records)
+                                   │
+                                   ▼
+                         Amazon Kinesis Stream
+                                   │
+                 ┌─────────────────┴──────────────────┐
+                 │                                    │
+                 ▼                                    ▼
+     Firehose (Raw Archive)              Firehose (Parsed Pipeline)
+        No Lambda                            Lambda Transformation
+                 │                                    │
+                 ▼                                    ▼
+      raw-encrypted/                         parsed/
+      (Encrypted Records)                (Readable JSON Events)
+                 │                                    │
+                 ▼                                    ▼
+        decrypt_record.py                     SNS Alerts
+                 │                            Security Monitoring
+                 ▼
+      Original Database Activity
+```
+
+---
+
+# Phase 1 — Understanding Aurora DAS Encryption
+
+## Objective
+
+Understand how Aurora protects database activity using envelope encryption instead of treating AWS Lambda as a black box.
+
+## Flow
+
+```text
+Aurora
+   │
+   ▼
+Encrypted DAS Record
+   │
+   ▼
+Kinesis Stream
+   │
+   ▼
+decrypt_record.py
+   │
+   ├── kms.decrypt()
+   ├── AWS Encryption SDK
+   ├── zlib.decompress()
+   ▼
+Readable Database Activity JSON
+```
+
+### Outcome
+
+- Read encrypted DAS records
+- Understand envelope encryption
+- Manually decrypt records
+- Recover original SQL statements
+
+---
+
+# Phase 2 — Production Monitoring Pipeline
+
+## Objective
+
+Build the AWS production architecture that continuously monitors database activity.
+
+## Flow
+
+```text
+Aurora DAS
+      │
+      ▼
+Kinesis Stream
+      │
+      ├──────────────► Firehose RAW
+      │                     │
+      │                     ▼
+      │             raw-encrypted/
+      │
+      ▼
+Firehose Parsed
+      │
+      ▼
+Lambda
+      │
+      ├── Decrypt
+      ├── Parse
+      ├── Classify
+      ├── Generate Alerts
+      ▼
+parsed/
+SNS
+```
+
+### Firehose RAW
+
+Purpose:
+
+- Archive encrypted DAS records
+- Replay and forensic analysis
+- Demonstrate manual decryption
+
+### Firehose Parsed
+
+Purpose:
+
+- Decrypt records automatically
+- Store readable JSON
+- Generate security alerts
+- Feed SIEM / Athena / dashboards
+
+---
+
+# Final Result
+
+```text
+                Aurora PostgreSQL
+                       │
+                       ▼
+              Database Activity Streams
+                       │
+                       ▼
+                Amazon Kinesis Stream
+                  /                \
+                 /                  \
+                ▼                    ▼
+     Firehose RAW            Firehose Parsed
+     (Encrypted)             (Lambda)
+          │                      │
+          ▼                      ▼
+ raw-encrypted/             parsed/
+          │                      │
+          ▼                      ▼
+ decrypt_record.py          SNS Alerts
+          │
+          ▼
+ Original SQL Activity
+```
+
+---
+
+## What This Project Demonstrates
+
+### Phase 1
+
+- Aurora DAS internals
+- Envelope encryption
+- KMS decryption
+- AWS Encryption SDK
+- Manual payload decryption
+
+### Phase 2
+
+- AWS reference architecture
+- Real-time monitoring
+- Automated decryption
+- Event classification
+- Security alerting
+- Raw encrypted archival
