@@ -1,6 +1,8 @@
 # PostgreSQL Indexing, Partitioning & Performance Tuning — Live Demo Runbook
 
 > Lab setup is documented separately in [`01_LAB_SETUP.md`](01_LAB_SETUP.md). Start there to download/restore `postgres_air` and create `demo.big_table1`.
+>
+> Partitioning setup and runnable SQL are in [`01_LAB_SETUP.md`](01_LAB_SETUP.md), section 6.
 
 ## Visual workflow
 

@@ -132,6 +132,139 @@ WHERE val BETWEEN 100000 AND 150000;
 
 Do not expect the index to win automatically. This range may match a meaningful fraction of the table; PostgreSQL can legitimately prefer a sequential scan if fetching many wide rows through the index is estimated to cost more. The purpose is to observe the plan and compare under controlled changes.
 
+
+## 6. Partitioning lab — range partitioning by date
+
+Use this self-contained lab to demonstrate declarative range partitioning. It is separate from `postgres_air` and `demo.big_table1`, so it won't alter those demo tables.
+
+### Create a partitioned parent and monthly partitions
+
+```sql
+CREATE SCHEMA IF NOT EXISTS lab_part;
+
+DROP TABLE IF EXISTS lab_part.sales_partitioned CASCADE;
+
+CREATE TABLE lab_part.sales_partitioned (
+    sale_id     bigint GENERATED ALWAYS AS IDENTITY,
+    sale_date   date NOT NULL,
+    customer_id integer NOT NULL,
+    amount      numeric(12,2) NOT NULL
+) PARTITION BY RANGE (sale_date);
+
+CREATE TABLE lab_part.sales_2026_01
+    PARTITION OF lab_part.sales_partitioned
+    FOR VALUES FROM ('2026-01-01') TO ('2026-02-01');
+
+CREATE TABLE lab_part.sales_2026_02
+    PARTITION OF lab_part.sales_partitioned
+    FOR VALUES FROM ('2026-02-01') TO ('2026-03-01');
+
+CREATE TABLE lab_part.sales_2026_03
+    PARTITION OF lab_part.sales_partitioned
+    FOR VALUES FROM ('2026-03-01') TO ('2026-04-01');
+
+-- Optional catch-all for dates outside the defined range:
+CREATE TABLE lab_part.sales_default
+    PARTITION OF lab_part.sales_partitioned DEFAULT;
+```
+
+**Range boundary rule:** `FROM` is inclusive and `TO` is exclusive. For example, the January partition contains dates from `2026-01-01` up to, but not including, `2026-02-01`.
+
+### Insert sample rows and check partition routing
+
+```sql
+INSERT INTO lab_part.sales_partitioned
+    (sale_date, customer_id, amount)
+VALUES
+    ('2026-01-10', 101, 125.00),
+    ('2026-01-31', 102, 240.00),
+    ('2026-02-12', 103, 89.99),
+    ('2026-03-25', 104, 500.00),
+    ('2026-04-02', 105, 75.00);
+
+SELECT tableoid::regclass AS actual_partition, *
+FROM lab_part.sales_partitioned
+ORDER BY sale_date;
+```
+
+The `tableoid` query shows the physical partition that received each row. The April row routes to the default partition.
+
+### Compare a query with partition pruning
+
+```sql
+EXPLAIN (ANALYZE, BUFFERS, TIMING OFF)
+SELECT *
+FROM lab_part.sales_partitioned
+WHERE sale_date >= DATE '2026-02-01'
+  AND sale_date <  DATE '2026-03-01';
+```
+
+Look for a plan that scans only `sales_2026_02` (or shows pruning of the other partitions). With only a few tiny partitions, timing is not meaningful; the goal is to inspect which partitions the planner/executor touches.
+
+### Create a matching non-partitioned comparison table
+
+```sql
+DROP TABLE IF EXISTS lab_part.sales_unpartitioned;
+
+CREATE TABLE lab_part.sales_unpartitioned AS
+SELECT sale_id, sale_date, customer_id, amount
+FROM lab_part.sales_partitioned;
+
+ANALYZE lab_part.sales_partitioned;
+ANALYZE lab_part.sales_unpartitioned;
+
+EXPLAIN (ANALYZE, BUFFERS, TIMING OFF)
+SELECT *
+FROM lab_part.sales_unpartitioned
+WHERE sale_date >= DATE '2026-02-01'
+  AND sale_date <  DATE '2026-03-01';
+```
+
+For a fair performance comparison, use substantially more rows, the same data in both tables, equivalent indexes, fresh statistics, and repeated runs. Partitioning does not automatically make every query faster.
+
+### Add a partition for a new month
+
+```sql
+CREATE TABLE lab_part.sales_2026_04
+    PARTITION OF lab_part.sales_partitioned
+    FOR VALUES FROM ('2026-04-01') TO ('2026-05-01');
+```
+
+If a default partition already contains rows for April, PostgreSQL may reject attaching/creating the new partition until the conflicting rows are moved out of the default partition. For a production-style workflow, create a standalone table, validate its range constraint, and attach it during a planned operation.
+
+### Inspect partition metadata
+
+```sql
+SELECT
+    parent.relid::regclass AS partitioned_table,
+    child.relid::regclass AS partition_name,
+    child.isleaf
+FROM pg_partition_tree('lab_part.sales_partitioned') AS child
+CROSS JOIN LATERAL (
+    SELECT 'lab_part.sales_partitioned'::regclass AS relid
+) AS parent
+ORDER BY child.level, child.relid::regclass::text;
+```
+
+A simpler catalog view is:
+
+```sql
+SELECT
+    inhparent::regclass AS parent_table,
+    inhrelid::regclass  AS child_partition
+FROM pg_inherits
+WHERE inhparent = 'lab_part.sales_partitioned'::regclass
+ORDER BY inhrelid::regclass::text;
+```
+
+### Important notes
+
+- Partitioning is most useful when partition boundaries align with common filters, data lifecycle/retention, or maintenance needs.
+- Queries need predicates that allow PostgreSQL to prune partitions; verify with `EXPLAIN`.
+- A primary key or unique constraint on a partitioned table generally must include all partition-key columns.
+- Creating a partitioned parent does not automatically create the monthly partitions you will need later; plan partition creation and retention operations.
+- Avoid dropping or truncating partitions unless you are certain the data can be removed.
+
 ## 5. Lab safety and repeatability
 
 - Keep `postgres_air` and `demo.big_table1` in a dedicated training database.
